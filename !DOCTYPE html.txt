@@ -1,0 +1,357 @@
+05.10 00:06
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>贪吃蛇-菜单+每10豆随机奖励图片</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: manipulation; }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #000;
+            min-height: 100vh;
+            padding: 10px;
+        }
+        #score {
+            color: white;
+            font-size: 24px;
+            margin: 10px 0;
+        }
+        canvas {
+            border: 2px solid white;
+            background: #000;
+            width: 90vw;
+            max-width: 320px;
+            height: auto;
+        }
+        .controls {
+            display: grid;
+            grid-template-areas:
+                ". up ."
+                "left down right";
+            gap: 10px;
+            margin-top: 15px;
+        }
+        button {
+            width: 60px;
+            height: 40px;
+            background: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #388e3c;
+        }
+        .btn-start {
+            width: 90px;
+            margin: 0 5px;
+            font-size: 16px;
+        }
+        .top-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+        /* 下拉菜单样式 */
+        .menu-wrap {
+            position: relative;
+            display: inline-block;
+        }
+        #settingBtn {
+            width: 90px;
+            font-size: 16px;
+            background: #1976d2;
+        }
+        .menu-box {
+            position: absolute;
+            top: 45px;
+            left: 0;
+            background: #222;
+            border: 1px solid #fff;
+            border-radius: 6px;
+            padding: 10px;
+            display: none;
+            z-index: 99;
+            min-width: 140px;
+        }
+        .menu-item {
+            color: #fff;
+            margin: 8px 0;
+            font-size: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap:10px;
+        }
+        .menu-item button {
+            width: auto;
+            height: 30px;
+            padding: 0 8px;
+            font-size: 14px;
+        }
+        .diff-btn.active {
+            background: #1976d2;
+        }
+        .toggle-btn.active {
+            background: #d32f2f;
+        }
+        /* 奖励弹窗样式 */
+        .award-mask {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            flex-direction: column;
+        }
+        .award-img {
+            width: 260px;
+            max-width: 80vw;
+            border: 3px solid #fff;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            object-fit: cover;
+        }
+        .close-award {
+            padding: 8px 20px;
+            background: #2e7d32;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">Score: 0</div>
+    <div class="top-controls">
+        <button class="btn-start" id="startBtn">开始</button>
+        <button class="btn-start" id="resetBtn">重置</button>
+        <div class="menu-wrap">
+            <button id="settingBtn">设置</button>
+            <div class="menu-box" id="menuBox">
+                <div class="menu-item">
+                    <span>难度</span>
+                    <div>
+                        <button class="diff-btn active" data-speed="200">简单</button>
+                        <button class="diff-btn" data-speed="120">中等</button>
+                        <button class="diff-btn" data-speed="60">困难</button>
+                    </div>
+                </div>
+                <div class="menu-item">
+                    <span>背景音乐</span>
+                    <button class="toggle-btn active" id="musicBtn">开启</button>
+                </div>
+                <div class="menu-item">
+                    <span>吃豆音效</span>
+                    <button class="toggle-btn active" id="soundBtn">开启</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <canvas id="game" width="320" height="400"></canvas>
+    <div class="controls">
+        <button id="up" style="grid-area: up">↑</button>
+        <button id="left" style="grid-area: left">←</button>
+        <button id="down" style="grid-area: down">↓</button>
+        <button id="right" style="grid-area: right">→</button>
+    </div>
+    <!-- 奖励弹窗 -->
+    <div class="award-mask" id="awardMask">
+        <img class="award-img" id="awardImg" alt="奖励">
+        <button class="close-award" id="closeAwardBtn">领取奖励，继续游戏</button>
+    </div>
+    <audio id="bgMusic" loop volume="0.3">
+        <source src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_5f8a0b9a8f.mp3?filename=higher-tobu-112624.mp3" type="audio/mpeg">
+    <audio id="eatSound" volume="0.5">
+        <source src="https://cdn.pixabay.com/download/audio/2022/03/02/audio_9f8909999f.mp3?filename=coin-101920.mp3" type="audio/mpeg">
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const grid = 20;
+        let snake = [{x: 160, y: 200}];
+        let dx = grid, dy = 0;
+        let food = spawnFood();
+        let score = 0;
+        let gameLoop;
+        let paused = true;
+        let gameSpeed = 200;
+        // 你的奖励图片链接，已全部替换
+        const awardImgList = [
+            "https://s3.bmp.ovh/2026/05/10/f10mVX9v.jpg",
+            "https://s3.bmp.ovh/2026/05/10/oEMFxfrI.jpg",
+            "https://s3.bmp.ovh/2026/05/10/00ePSVJ9.jpg",
+            "https://s3.bmp.ovh/2026/05/10/WupSW8Qq.jpg",
+            "https://s3.bmp.ovh/2026/05/09/WssOSeD9.jpg",
+            "https://s3.bmp.ovh/2026/05/09/UmiUpCt0.jpg",
+            "https://s3.bmp.ovh/2026/05/09/hHule2EJ.jpg",
+            "https://s3.bmp.ovh/2026/05/09/s1fIXVfr.jpg",
+            "https://s3.bmp.ovh/2026/05/09/Nb3DqifC.jpg",
+            "https://s3.bmp.ovh/2026/05/09/9VChLzhV.jpg",
+            "https://s3.bmp.ovh/2026/05/09/3Wh2daVr.jpg",
+            "https://s3.bmp.ovh/2026/05/09/N6zhDVAS.png",
+            "https://s3.bmp.ovh/2026/05/09/ql3jUp9R.webp"
+        ];
+        // 记录吃到的豆子数量
+        let eatCount = 0;
+        // 音频
+        const bgMusic = document.getElementById('bgMusic');
+        const eatSound = document.getElementById('eatSound');
+        const musicBtn = document.getElementById('musicBtn');
+        const soundBtn = document.getElementById('soundBtn');
+        let musicOn = true;
+        let soundOn = true;
+        // 奖励弹窗元素
+        const awardMask = document.getElementById('awardMask');
+        const awardImg = document.getElementById('awardImg');
+        const closeAwardBtn = document.getElementById('closeAwardBtn');
+        // 关闭奖励弹窗
+        closeAwardBtn.onclick = () => {
+            awardMask.style.display = 'none';
+            paused = false;
+            document.getElementById('startBtn').textContent = '暂停';
+        };
+        // 菜单元素
+        const settingBtn = document.getElementById('settingBtn');
+        const menuBox = document.getElementById('menuBox');
+        const difficultyBtns = document.querySelectorAll('.diff-btn');
+        settingBtn.addEventListener('click', () => {
+            menuBox.style.display = menuBox.style.display === 'block' ? 'none' : 'block';
+        });
+        document.addEventListener('click', (e) => {
+            if(!settingBtn.contains(e.target) && !menuBox.contains(e.target)){
+                menuBox.style.display = 'none';
+            }
+        });
+        // 随机选一张奖励图
+        function getRandomAwardImg(){
+            let randomIndex = Math.floor(Math.random() * awardImgList.length);
+            return awardImgList[randomIndex];
+        }
+        // 弹出奖励图片
+        function showAward() {
+            paused = true;
+            // 随机切换图片
+            awardImg.src = getRandomAwardImg();
+            awardMask.style.display = 'flex';
+        }
+        function spawnFood() {
+            let x = Math.floor(Math.random() * (canvas.width / grid)) * grid;
+            let y = Math.floor(Math.random() * (canvas.height / grid)) * grid;
+            if (snake.some(p => p.x === x && p.y === y)) return spawnFood();
+            return {x, y};
+        }
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#0f0';
+            snake.forEach(part => ctx.fillRect(part.x, part.y, grid-1, grid-1));
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(food.x, food.y, grid-1, grid-1);
+        }
+        function playEatSound() {
+            if (soundOn) {
+                eatSound.currentTime = 0;
+                eatSound.play().catch(err => {});
+            }
+        }
+        function move() {
+            if (paused) return;
+            let head = {x: snake[0].x + dx, y: snake[0].y + dy};
+            if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height || snake.some(p => p.x === head.x && p.y === head.y)) {
+                bgMusic.pause();
+                alert("游戏结束！得分：" + score);
+                reset();
+                return;
+            }
+            snake.unshift(head);
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                eatCount++; 
+                document.getElementById('score').textContent = "Score: " + score;
+                playEatSound();
+                food = spawnFood();
+                // 每吃10个豆 随机弹一张你的奖励图
+                if(eatCount % 10 === 0){
+                    showAward();
+                }
+            } else {
+                snake.pop();
+            }
+        }
+        function reset() {
+            clearInterval(gameLoop);
+            gameLoop = null;
+            snake = [{x: 160, y: 200}];
+            dx = grid; dy = 0;
+            score = 0;
+            eatCount = 0; 
+            paused = true;
+            document.getElementById('score').textContent = "Score: 0";
+            document.getElementById('startBtn').textContent = "开始";
+            food = spawnFood();
+            draw();
+            bgMusic.pause();
+            bgMusic.currentTime = 0;
+            awardMask.style.display = 'none';
+        }
+        difficultyBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (paused) {
+                    difficultyBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    gameSpeed = Number(btn.dataset.speed);
+                }
+            });
+        });
+        musicBtn.addEventListener('click', () => {
+            musicOn = !musicOn;
+            musicBtn.classList.toggle('active');
+            musicBtn.innerText = musicOn ? '开启' : '关闭';
+            if (musicOn) {
+                if (!paused) bgMusic.play().catch(err => {});
+            } else {
+                bgMusic.pause();
+            }
+        });
+        soundBtn.addEventListener('click', () => {
+            soundOn = !soundOn;
+            soundBtn.classList.toggle('active');
+            soundBtn.innerText = soundOn ? '开启' : '关闭';
+        });
+        document.getElementById('startBtn').onclick = () => {
+            paused = !paused;
+            document.getElementById('startBtn').textContent = paused ? "开始" : "暂停";
+            if (paused) {
+                clearInterval(gameLoop);
+                gameLoop = null;
+                bgMusic.pause();
+            } else {
+                if (musicOn) bgMusic.play().catch(err => {});
+                if (!gameLoop) gameLoop = setInterval(() => { move(); draw(); }, gameSpeed);
+            }
+        };
+        document.getElementById('resetBtn').onclick = reset;
+        document.getElementById('up').onclick = () => { if (dy !== grid) { dx = 0; dy = -grid; } };
+        document.getElementById('down').onclick = () => { if (dy !== -grid) { dx = 0; dy = grid; } };
+        document.getElementById('left').onclick = () => { if (dx !== grid) { dx = -grid; dy = 0; } };
+        document.getElementById('right').onclick = () => { if (dx !== -grid) { dx = grid; dy = 0; } };
+        draw();
+    </script>
+</body>
+</html>
+
